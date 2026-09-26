@@ -1,23 +1,124 @@
-version: '3.8'
-
 services:
-  airflow:
-    image: apache/airflow:2.9.3
-    container_name: abd_dataops-airflow
-    restart: always
+
+  airflow-postgres:
+    image: postgres:16
+    container_name: abd_dataops-airflow-postgres
+    restart: unless-stopped
     environment:
-      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
-      - AIRFLOW__CORE__LOAD_EXAMPLES=False
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
-      - AIRFLOW__CORE__FERNET_KEY=9Qtu2ONg0DKcV4O6-eI5c2L7K8m6nS8W5_aZ8z9KXwU=
-      - PYTHONPATH=/opt/airflow:/opt/airflow/project
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+
+  airflow-init:
+    image: apache/airflow:2.9.3
+    container_name: abd_dataops-airflow-init
+    user: "50000:0"
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: "9Qtu2ONg0DKcV4O6-eI5c2L7K8m6nS8W5_aZ8z9KXwU="
+      AIRFLOW__WEBSERVER__WEB_SERVER_HOST: "0.0.0.0"
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: "8080"
+      PYTHONPATH: "/opt/airflow:/opt/airflow/project"
+
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/plugins:/opt/airflow/plugins
       - ./airflow/logs:/opt/airflow/logs
       - ./ml:/opt/airflow/ml
       - .:/opt/airflow/project
-    command: bash -c "airflow db init && airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin && airflow scheduler & airflow webserver"
+
+    working_dir: /opt/airflow/project
+
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com \
+          --password admin || true
+
+
+  airflow-webserver:
+    image: apache/airflow:2.9.3
+    container_name: abd_dataops-airflow-webserver
+    restart: unless-stopped
+    user: "50000:0"
+
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: "9Qtu2ONg0DKcV4O6-eI5c2L7K8m6nS8W5_aZ8z9KXwU="
+      AIRFLOW__WEBSERVER__WEB_SERVER_HOST: "0.0.0.0"
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: "8080"
+      PYTHONPATH: "/opt/airflow:/opt/airflow/project"
+
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/logs:/opt/airflow/logs
+      - ./ml:/opt/airflow/ml
+      - .:/opt/airflow/project
+
+    working_dir: /opt/airflow/project
+
+    command: airflow webserver
+
     ports:
       - "8080:8080"
+
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3
+    container_name: abd_dataops-airflow-scheduler
+    restart: unless-stopped
+    user: "50000:0"
+
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: "9Qtu2ONg0DKcV4O6-eI5c2L7K8m6nS8W5_aZ8z9KXwU="
+      PYTHONPATH: "/opt/airflow:/opt/airflow/project"
+
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/logs:/opt/airflow/logs
+      - ./ml:/opt/airflow/ml
+      - .:/opt/airflow/project
+
     working_dir: /opt/airflow/project
+
+    command: airflow scheduler
+
+
+volumes:
+  airflow_postgres_data:

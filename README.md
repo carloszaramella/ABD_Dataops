@@ -2,7 +2,7 @@
 
 Projeto acadêmico desenvolvido para a disciplina de **DataOps — MBA FIAP**, com foco em **Data Quality, Data Governance, automação e orquestração de pipelines de dados**.
 
-O projeto utiliza **Python, Pandas, Jupyter Notebook e Docker** para implementar critérios de qualidade de dados e, como evolução da solução, utiliza **Apache Airflow** para orquestrar a execução dos testes.
+O projeto utiliza **Python, Pandas, Jupyter Notebook, Docker e Apache Airflow** para implementar critérios de qualidade de dados e executar os testes de forma automatizada e orquestrada.
 
 ---
 
@@ -17,12 +17,12 @@ O projeto utiliza **Python, Pandas, Jupyter Notebook e Docker** para implementar
 * [1. Clonar o projeto](#1-clonar-o-projeto)
 * [2. Subir o ambiente Jupyter](#2-subir-o-ambiente-jupyter)
 * [3. Acessar o Jupyter](#3-acessar-o-jupyter)
-* [4. Entender porta e token](#4-entender-porta-e-token)
-* [5. Executar os testes](#5-executar-os-testes)
-* [6. Data Quality](#6-data-quality)
-* [7. Orquestração com Airflow](#7-orquestração-com-airflow)
-* [8. Fluxo do pipeline](#8-fluxo-do-pipeline)
-* [9. Validação da execução](#9-validação-da-execução)
+* [4. Executar os testes de Data Quality](#4-executar-os-testes-de-data-quality)
+* [5. Subir o ambiente Airflow](#5-subir-o-ambiente-airflow)
+* [6. Acessar o Airflow](#6-acessar-o-airflow)
+* [7. Validar o DAG](#7-validar-o-dag)
+* [8. Executar o pipeline pelo Scheduler](#8-executar-o-pipeline-pelo-scheduler)
+* [9. Fluxo do pipeline](#9-fluxo-do-pipeline)
 * [10. Troubleshooting](#10-troubleshooting)
 * [11. Encerrar o ambiente](#11-encerrar-o-ambiente)
 * [Próximos passos](#-próximos-passos)
@@ -45,7 +45,7 @@ Os testes contemplam:
 6. **Unicidade**
 7. **Integridade Referencial**
 
-Esses critérios correspondem aos cenários definidos no trabalho acadêmico.
+A lógica de validação é implementada em módulos Python reutilizáveis e pode ser utilizada tanto no notebook quanto na DAG do Airflow.
 
 ---
 
@@ -61,15 +61,13 @@ Esses critérios correspondem aos cenários definidos no trabalho acadêmico.
 * Validar integridade referencial.
 * Executar os testes em ambiente reproduzível utilizando Docker.
 * Utilizar Jupyter Notebook para desenvolvimento e evidências.
-* Evoluir os testes para uma execução orquestrada pelo Apache Airflow.
+* Utilizar Apache Airflow para orquestrar os testes de Data Quality.
 
 ---
 
 # 🏗️ Arquitetura
 
-A solução é dividida em duas partes.
-
-### Desenvolvimento e validação
+## Desenvolvimento e validação
 
 ```text
 Dataset
@@ -81,33 +79,47 @@ Jupyter Notebook
 Python / Pandas
    │
    ▼
-Testes de Data Quality
+Data Quality
 ```
 
-### Execução automatizada
+## Execução automatizada
 
 ```text
-Dataset
-   │
-   ▼
-Airflow
-   │
-   ├── Schema
-   ├── Volume
-   ├── Valores
-   ├── Numéricos e Datas
-   ├── Formatos
-   ├── Unicidade
-   └── Integridade Referencial
-           │
-           ▼
-       Resultado
-        ┌──┴──┐
-        ▼     ▼
-       PASS  FAIL
+                 Dataset
+                    │
+                    ▼
+              Apache Airflow
+                    │
+                    ▼
+             PythonOperator
+                    │
+                    ▼
+              validate_all()
+                    │
+        ┌───────────┼───────────┐
+        ▼           ▼           ▼
+     Schema      Volume      Values
+        │           │           │
+        └───────────┼───────────┘
+                    │
+                    ▼
+              Numeric / Date
+                    │
+                    ▼
+                  Format
+                    │
+                    ▼
+                Uniqueness
+                    │
+                    ▼
+          Referential Integrity
+                    │
+              ┌─────┴─────┐
+              ▼           ▼
+            PASS         FAIL
 ```
 
-O Airflow será responsável pela **orquestração**, enquanto a lógica de validação permanecerá implementada em Python.
+O **Airflow** é responsável pela orquestração, enquanto a lógica de validação permanece implementada em Python.
 
 ---
 
@@ -121,6 +133,7 @@ O Airflow será responsável pela **orquestração**, enquanto a lógica de vali
 | Docker           | Containerização              |
 | Docker Compose   | Gerenciamento dos containers |
 | Apache Airflow   | Orquestração                 |
+| PostgreSQL       | Metadata Database do Airflow |
 | Git              | Versionamento                |
 | GitHub           | Repositório                  |
 
@@ -132,6 +145,8 @@ O Airflow será responsável pela **orquestração**, enquanto a lógica de vali
 ABD_Dataops/
 │
 ├── ml/
+│   ├── curso.txt
+│   ├── README.md
 │   └── trab_testes_data_quality.ipynb
 │
 ├── data_quality/
@@ -162,8 +177,6 @@ ABD_Dataops/
 ├── kowl_config.yaml
 └── mysql/
 ```
-
-> A estrutura `airflow/` será utilizada na evolução da solução para orquestração dos testes.
 
 ---
 
@@ -226,7 +239,7 @@ ls
 
 # 2. Subir o ambiente Jupyter
 
-O ambiente Jupyter é executado através do Docker Compose.
+O ambiente Jupyter/AutoML é executado através do Docker Compose.
 
 Execute:
 
@@ -234,7 +247,7 @@ Execute:
 docker compose -f docker-compose-jupyter.yml up -d
 ```
 
-Verifique o container:
+Verifique os containers:
 
 ```bash
 docker ps
@@ -248,60 +261,29 @@ Exemplo:
 abd_dataops-automl-1
 ```
 
-O Compose publica a porta `8888` do container na porta `8789` da máquina local.
+O projeto publica:
+
+```text
+HOST 8789 → CONTAINER 8888
+```
 
 ---
 
 # 3. Acessar o Jupyter
 
-O Jupyter pode ser acessado pelo navegador:
-
-```text
-http://localhost:8789
-```
-
-ou:
+Utilize:
 
 ```text
 http://127.0.0.1:8789
 ```
 
----
+> **Importante:** neste ambiente Linux/WSL, utilize `127.0.0.1` em vez de `localhost` quando houver problema de resolução IPv6.
 
-# 4. Entender porta e token
-
-## 🔌 Porta
-
-O Docker realiza o seguinte mapeamento:
-
-```text
-HOST                  CONTAINER
-
-localhost:8789  ───►  8888
-                         │
-                         ▼
-                       Jupyter
-```
-
-Portanto:
-
-```text
-http://127.0.0.1:8888
-```
-
-é a porta interna do container e não é a URL utilizada normalmente pelo navegador da máquina host.
-
-O acesso deve ser feito pela porta publicada:
-
-```text
-http://127.0.0.1:8789
-```
+O endereço interno do container é diferente do endereço utilizado pelo navegador da máquina host.
 
 ---
 
 ## 🔐 Token do Jupyter
-
-O Jupyter utiliza um token de autenticação para permitir o acesso ao servidor.
 
 Para obter o token:
 
@@ -315,37 +297,17 @@ O resultado será semelhante a:
 http://127.0.0.1:8888/?token=SEU_TOKEN
 ```
 
-O token é a sequência existente depois de:
-
-```text
-?token=
-```
-
-Por exemplo:
-
-```text
-?token=44ea7656364e7875130beb913cd3ceeb6a9777de5a297bf6
-```
-
 Para acessar pela máquina host, utilize a porta publicada:
 
 ```text
 http://127.0.0.1:8789/?token=SEU_TOKEN
 ```
 
-### Importante
-
 O token pode mudar quando o container/Jupyter for reiniciado.
-
-Por isso, se o acesso pelo navegador solicitar autenticação novamente, consulte os logs do container:
-
-```bash
-docker logs abd_dataops-automl-1 2>&1 | grep -i token
-```
 
 ---
 
-# 5. Executar os testes
+# 4. Executar os testes de Data Quality
 
 O notebook principal está localizado em:
 
@@ -355,403 +317,204 @@ ml/trab_testes_data_quality.ipynb
 
 Abra o arquivo no VS Code ou no Jupyter.
 
-O notebook contém as implementações dos testes de qualidade.
+O notebook contém as implementações e evidências dos testes de qualidade de dados.
 
-A execução deve ser realizada na sequência apresentada no notebook.
+> **Importante:** um arquivo `.ipynb` não deve ser executado diretamente pelo Bash.
 
----
-
-# 6. Data Quality
-
-## 6.1 Schema
-
-Verifica:
-
-* existência das colunas;
-* quantidade de colunas;
-* tipos;
-* estrutura esperada.
-
-Exemplo:
-
-```text
-ID → INTEGER
-NOTA_MAT_1 ... NOTA_MAT_4 → NUMERIC
-```
-
----
-
-## 6.2 Volume
-
-Verifica se a quantidade de registros está dentro do volume esperado.
-
-Exemplo:
-
-```text
-19.000 ≤ registros ≤ 21.100
-```
-
----
-
-## 6.3 Valores
-
-Verifica se os valores estão dentro dos conjuntos esperados.
-
-Exemplo:
-
-```text
-PERFIL ∈ {
-    "DIFICULDADE",
-    "MUITO BOM",
-    "EXCELENTE"
-}
-```
-
----
-
-## 6.4 Numéricos e Datas
-
-Valida intervalos e regras numéricas.
-
-Exemplo:
-
-```text
-0 ≤ NOTA_MAT_1 ≤ 10
-```
-
-Podem também ser avaliados:
-
-* média;
-* mediana;
-* desvio padrão;
-* somatórios;
-* intervalos de datas.
-
----
-
-## 6.5 Formatos
-
-Valida padrões dos dados.
-
-Exemplo:
-
-```text
-NOME → máximo de 157 caracteres
-
-MATRICULA → 6 dígitos numéricos
-```
-
----
-
-## 6.6 Unicidade
-
-Verifica duplicidades em campos que devem ser únicos.
-
-Exemplo:
-
-```text
-ID → único
-
-MATRICULA → única
-```
-
----
-
-## 6.7 Integridade Referencial
-
-Verifica a consistência entre dados.
-
-Exemplo:
-
-```text
-REPROVACOES_MAT_1 > 0
-        ↓
-NOTA_MAT_1 < 4
-```
-
-Também pode validar a existência de uma `MATRICULA` em uma tabela de referência.
-
----
-
-# 7. Orquestração com Airflow
-
-Como evolução da solução, os testes serão executados através do **Apache Airflow**.
-
-A abordagem é inspirada na estrutura do projeto de referência `tonanuvem/datagov`, que utiliza scripts de inicialização, DAGs e scripts de validação da execução do pipeline.
-
-No projeto de referência, o Airflow é utilizado como camada de orquestração e as DAGs são posteriormente validadas por um script que dispara a DAG, acompanha seu estado e verifica os resultados.
-
-No `ABD_Dataops`, essa abordagem será adaptada para os testes de Data Quality.
-
-## Estrutura implementada
-
-```text
-ABD_Dataops/
-│
-├── ml/
-│   └── trab_testes_data_quality.ipynb
-│
-├── data_quality/
-│   ├── __init__.py
-│   ├── schema.py
-│   ├── volume.py
-│   ├── values.py
-│   ├── numeric_dates.py
-│   ├── formats.py
-│   ├── uniqueness.py
-│   └── referential_integrity.py
-│
-├── airflow/
-│   ├── dags/
-│   │   └── data_quality_dag.py
-│   ├── logs/
-│   └── plugins/
-│
-├── docker-compose-jupyter.yml
-├── docker-compose-airflow.yml
-├── validate_airflow.sh
-├── README.md
-└── .venv/
-```
-
-A lógica de qualidade foi separada em módulos reutilizáveis e agora é utilizada tanto no notebook para demonstração acadêmica quanto na DAG do Airflow para execução orquestrada.
-
-
----
-
-# 8. Fluxo do pipeline
-
-A DAG deverá executar:
-
-```text
-START
-  │
-  ▼
-LOAD DATA
-  │
-  ▼
-SCHEMA TEST
-  │
-  ▼
-VOLUME TEST
-  │
-  ▼
-VALUES TEST
-  │
-  ▼
-NUMERIC / DATE TEST
-  │
-  ▼
-FORMAT TEST
-  │
-  ▼
-UNIQUENESS TEST
-  │
-  ▼
-REFERENTIAL INTEGRITY
-  │
-  ▼
-END
-```
-
-Cada tarefa deverá produzir um resultado de sucesso ou falha.
-
----
-
-# 9. Validação da execução
-
-Assim como no projeto de referência, será criado um script de validação para:
-
-1. verificar se a DAG está registrada;
-2. executar a DAG;
-3. acompanhar sua execução;
-4. identificar `success` ou `failed`;
-5. consultar os logs;
-6. apresentar um resumo da execução.
-
-Exemplo:
+Não faça:
 
 ```bash
-./airflow/validate_pipeline.sh
+ml/trab_testes_data_quality.ipynb
 ```
 
-Resultado esperado:
+Para trabalhar com o notebook, abra-o pelo VS Code ou Jupyter.
+
+---
+
+# 5. Subir o ambiente Airflow
+
+O Airflow é executado separadamente através do:
 
 ```text
-=== Validação do Pipeline ===
-
-DAG registrada: OK
-
-Executando Data Quality Pipeline...
-
-Schema: PASS
-Volume: PASS
-Values: PASS
-Numeric/Date: PASS
-Format: PASS
-Uniqueness: PASS
-Referential Integrity: PASS
-
-Pipeline concluído com sucesso.
+docker-compose-airflow.yml
 ```
 
----
+Suba o ambiente:
 
-# 🔄 Fluxo completo DataOps
+```bash
+docker compose -f docker-compose-airflow.yml up -d
+```
 
-A solução final será organizada da seguinte maneira:
+Verifique os serviços:
+
+```bash
+docker compose -f docker-compose-airflow.yml ps
+```
+
+A configuração atual utiliza:
 
 ```text
-                  ┌──────────────┐
-                  │    Dataset   │
-                  └──────┬───────┘
-                         │
-                         ▼
-                  ┌──────────────┐
-                  │    Airflow   │
-                  │ Orquestração │
-                  └──────┬───────┘
-                         │
-                         ▼
-                ┌─────────────────┐
-                │ Data Quality    │
-                │ Python / Pandas │
-                └────────┬────────┘
-                         │
-             ┌───────────┼───────────┐
-             ▼           ▼           ▼
-          Schema      Volume      Values
-             │           │           │
-             └───────────┼───────────┘
-                         │
-                         ▼
-                Numeric / Date
-                         │
-                         ▼
-                      Format
-                         │
-                         ▼
-                    Uniqueness
-                         │
-                         ▼
-              Referential Integrity
-                         │
-                    ┌────┴────┐
-                    ▼         ▼
-                  PASS       FAIL
-                    │         │
-                    ▼         ▼
-                 Success     Logs
+airflow-postgres
+airflow-webserver
+airflow-scheduler
+```
+
+O PostgreSQL é utilizado como **metadata database do Airflow**.
+
+O ambiente também pode apresentar o serviço:
+
+```text
+abd_dataops-automl-1
+```
+
+que é responsável pelo Jupyter/AutoML.
+
+---
+
+## Serviços e portas
+
+```text
+Airflow Webserver
+127.0.0.1:8080 → container:8080
+
+Jupyter / AutoML
+127.0.0.1:8789 → container:8888
 ```
 
 ---
 
-# 🛠️ Troubleshooting
+# 6. Acessar o Airflow
 
-## `docker-compose: command not found`
+Abra:
 
-Utilize:
-
-```bash
-docker compose
+```text
+http://127.0.0.1:8080
 ```
 
-em vez de:
+Login:
+
+```text
+Usuário: admin
+Senha: admin
+```
+
+> **Importante:** utilize `127.0.0.1:8080` em vez de `localhost:8080` neste ambiente.
+
+O acesso por `127.0.0.1:8080` foi validado com sucesso.
+
+---
+
+# 7. Validar o DAG
+
+O DAG implementado no projeto é:
+
+```text
+data_quality_checks
+```
+
+Arquivo:
+
+```text
+airflow/dags/data_quality_dag.py
+```
+
+Para verificar se o Airflow reconhece o DAG:
 
 ```bash
-docker-compose
+docker compose -f docker-compose-airflow.yml exec airflow-webserver \
+  airflow dags list
+```
+
+O resultado deverá conter:
+
+```text
+data_quality_checks
 ```
 
 ---
 
-## Jupyter não abre
+## Verificar erros de importação
 
-Verifique:
+Execute:
 
 ```bash
-docker ps
+docker compose -f docker-compose-airflow.yml exec airflow-webserver \
+  airflow dags list-import-errors
 ```
 
-Depois consulte:
+Se não houver erros, o DAG foi carregado corretamente.
+
+---
+
+## Testar o DAG diretamente
+
+Para executar o DAG em modo de teste:
 
 ```bash
-docker logs abd_dataops-automl-1
+docker compose -f docker-compose-airflow.yml exec airflow-webserver \
+  airflow dags test data_quality_checks 2026-09-26
 ```
 
-Para localizar o token:
+Esse comando executa o DAG diretamente e permite validar a lógica sem depender do agendamento do Scheduler.
 
-```bash
-docker logs abd_dataops-automl-1 2>&1 | grep -i token
+O resultado esperado é:
+
+```text
+Marking task as SUCCESS
+```
+
+e:
+
+```text
+Marking run ... state:success
+```
+
+### Resultado validado no projeto
+
+A execução foi realizada com sucesso e apresentou:
+
+```text
+Data Quality: PASS
+```
+
+Foram validados:
+
+* Schema
+* Volume
+* Values
+* Numeric / Date
+* Formats
+* Uniqueness
+* Referential Integrity
+
+A execução validada apresentou:
+
+```text
+199 registros
+199 matrículas únicas
+```
+
+e:
+
+```text
+DagRun ... state:success
 ```
 
 ---
 
-## Token inválido
+# 8. Executar o pipeline pelo Scheduler
 
-O token pode ter sido renovado após o restart do container.
-
-Obtenha o novo token:
+Para executar o pipeline através do Airflow Scheduler, utilize:
 
 ```bash
-docker logs abd_dataops-automl-1 2>&1 | grep -i token
+docker compose -f docker-compose-airflow.yml exec airflow-webserver \
+  airflow dags trigger data_quality_checks
 ```
 
----
+O comando retorna o `run_id` da execução.
 
-## Container parado
-
-Suba novamente:
+Depois acompanhe o Scheduler:
 
 ```bash
-docker compose -f docker-compose-jupyter.yml up -d
+docker compose -f docker-compose-airfl
 ```
-
-Verifique:
-
-```bash
-docker ps
-```
-
----
-
-# 🧹 Encerrar o ambiente
-
-Para parar os serviços:
-
-```bash
-docker compose -f docker-compose-jupyter.yml down
-```
-
-Para verificar os containers:
-
-```bash
-docker ps
-```
-
----
-
-# 🚀 Próximas evoluções
-
-* [ ] Implementar DAG do Airflow
-* [ ] Separar regras de Data Quality em módulos Python
-* [ ] Criar script de validação do pipeline
-* [ ] Implementar logs estruturados
-* [ ] Implementar tratamento de falhas
-* [ ] Criar alertas para falhas de qualidade
-* [ ] Integrar com CI/CD
-* [ ] Avaliar Great Expectations
-* [ ] Avaliar dbt
-* [ ] Adicionar Data Catalog
-* [ ] Implementar lineage
-
----
-
-# 👨‍💻 Autor
-
-**Carlos Zaramella**
-
-Projeto acadêmico — MBA FIAP — DataOps.
-
-## 🔗 Repositório
-
-https://github.com/carloszaramella/ABD_Dataops
